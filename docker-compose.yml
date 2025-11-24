@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: sentiments-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sentiments-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentiments-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: ${PORT}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      D_ID_API_KEY: ${D_ID_API_KEY}
+      HEYGEN_API_KEY: ${HEYGEN_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      SORA_API_KEY: ${SORA_API_KEY}
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER}
+      VIDEO_FALLBACK_PROVIDER: ${VIDEO_FALLBACK_PROVIDER}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+    volumes:
+      # Mount source code for hot reload
+      - ./backend:/app
+      # Don't mount node_modules (use container's version)
+      - /app/node_modules
+    depends_on:
+      - db
+    networks:
+      - sentiments-network
+
+  # Web Frontend
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: sentiments-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+    volumes:
+      # Mount source code for hot reload
+      - ./web:/app
+      # Don't mount node_modules (use container's version)
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - sentiments-network
+
+networks:
+  sentiments-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

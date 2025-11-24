@@ -1,0 +1,216 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  name              String?
+  voiceStory        String?   @db.Text
+  voiceAudioUrl     String?
+  preferences       Json?     @default("{\"videoLength\":30,\"tone\":\"motivational\",\"topics\":[]}")
+  notificationTimes Json      @default("{\"wake\":\"08:00\",\"lunch\":\"12:00\",\"bed\":\"21:00\"}")
+  fcmToken          String?   // Firebase Cloud Messaging token for push notifications
+
+  // Streak tracking
+  currentStreak     Int       @default(0)
+  longestStreak     Int       @default(0)
+  lastWatchedDate   DateTime?
+
+  // Stats
+  totalVideosWatched Int      @default(0)
+  totalWatchTime     Int      @default(0) // in seconds
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  videos            Video[]
+  favorites         Favorite[]
+  reactions         VideoReaction[]
+  achievements      UserAchievement[]
+  goals             Goal[]
+  journalEntries    JournalEntry[]
+  voiceClones       VoiceClone[]
+
+  @@index([email])
+}
+
+model VoiceClone {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String   // "My Mom", "Tony Robbins", etc.
+  relationship    String?  // "mother", "friend", "mentor", "role_model"
+  description     String?  @db.Text
+  gender          String?  // "male", "female", "other"
+  language        String   @default("en")
+
+  // Provider info
+  provider        String   // "elevenlabs", "playht", "resemble"
+  providerId      String   // ID from the voice cloning provider
+
+  // Audio samples
+  sampleAudioUrl  String?  // URL to the original sample audio
+
+  // Status
+  status          String   @default("processing") // "processing", "ready", "failed"
+
+  // Consent tracking
+  consentGiven    Boolean  @default(false)
+  consentType     String?  // "self", "family_member", "public_figure", "ted_speaker"
+  consentProof    String?  @db.Text // Details about consent
+
+  // Usage
+  isActive        Boolean  @default(true)
+  lastUsedAt      DateTime?
+  usageCount      Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@index([userId, status])
+}
+
+model Video {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  content       String    @db.Text
+  videoUrl      String
+  thumbnailUrl  String?
+  duration      Int       @default(30)
+  musicTrack    String?
+  category      String    @default("general") // morning, afternoon, evening, workout, reflection, general
+  viewed        Boolean   @default(false)
+  viewedAt      DateTime?
+  scheduledFor  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  favorites     Favorite[]
+  reactions     VideoReaction[]
+  journalEntries JournalEntry[]
+
+  @@index([userId, viewed])
+  @@index([userId, createdAt])
+  @@index([userId, category])
+}
+
+model ContentSource {
+  id          String   @id @default(uuid())
+  type        String   // "ted_talk", "quote", "article", "story"
+  title       String
+  author      String?
+  content     String   @db.Text
+  sourceUrl   String?
+  tags        String[]
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, videoId])
+  @@index([userId])
+}
+
+model VideoReaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  type      String   // "like", "love", "fire"
+  createdAt DateTime @default(now())
+
+  @@unique([userId, videoId])
+  @@index([userId])
+  @@index([videoId])
+}
+
+model Achievement {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  description String
+  icon        String            // emoji or icon name
+  requirement String            // e.g., "watch_7_days_streak", "watch_30_videos"
+  threshold   Int               // numeric requirement
+  createdAt   DateTime          @default(now())
+
+  users       UserAchievement[]
+
+  @@index([name])
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+}
+
+model Goal {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?   @db.Text
+  targetDate  DateTime?
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, completed])
+}
+
+model JournalEntry {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId   String?
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  content   String   @db.Text
+  mood      String?  // "motivated", "grateful", "focused", etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model DailyQuote {
+  id        String   @id @default(uuid())
+  quote     String   @db.Text
+  author    String
+  category  String?  // "motivation", "success", "mindset", etc.
+  date      DateTime @unique @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}

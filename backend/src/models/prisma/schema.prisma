@@ -1,0 +1,61 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  name              String?
+  voiceStory        String?   @db.Text
+  voiceAudioUrl     String?
+  preferences       Json?
+  notificationTimes Json      @default("{\"wake\":\"08:00\",\"lunch\":\"12:00\",\"bed\":\"21:00\"}")
+  fcmToken          String?   // Firebase Cloud Messaging token for push notifications
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  videos            Video[]
+
+  @@index([email])
+}
+
+model Video {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  content       String    @db.Text
+  videoUrl      String
+  thumbnailUrl  String?
+  duration      Int       @default(30)
+  musicTrack    String?
+  viewed        Boolean   @default(false)
+  scheduledFor  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, viewed])
+  @@index([userId, createdAt])
+}
+
+model ContentSource {
+  id          String   @id @default(uuid())
+  type        String   // "ted_talk", "quote", "article", "story"
+  title       String
+  author      String?
+  content     String   @db.Text
+  sourceUrl   String?
+  tags        String[]
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([createdAt])
+}
